@@ -3,3 +3,5 @@ dataset/
 CSI500_res/
 NASDAQ100_res/
 CSI300_res/
+SP500_res/
+ablation_experiment/csi300/res/

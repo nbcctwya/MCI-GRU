@@ -453,36 +453,45 @@ class StockPredictionModel(nn.Module):
         for t in range(num_time_steps):
             h_gru = self.attention_gru(x_time_series[:, :, t, :], h_gru)
         h_gru_1 = h_gru[-1,:,:]
-        # print(h_gru_1.shape)
-
         # 处理图数据
         x_gat = self.gat_layer(x_graph, edge_index, edge_weight)
-        # print(x_gat.shape)
-
         # 用市场隐状态 R 的表征去访问股票表征 S
         # torch.Size([285, 32])
         stock_rep_1 = self.cross_attention(h_gru_1.unsqueeze(1), self.market_hidden_states_1, self.market_hidden_states_1).squeeze(1)
-       
         stock_rep_2 = self.cross_attention(x_gat.unsqueeze(1), self.market_hidden_states_2, self.market_hidden_states_2).squeeze(1)
-        # print(stock_rep_2.shape)
-        # 报错
-    
         # 拼接四个部分的输出
         concatenated_output = torch.cat([h_gru_1, x_gat, stock_rep_1, stock_rep_2], dim=1)
-        # print(concatenated_output.shape)
-        
         # 添加自注意力机制
         attention_output = self.self_attention(concatenated_output.unsqueeze(1)).squeeze(1)
-        # print(attention_output.shape)
-        
         # 通过最终 GAT 层进行预测
         out = self.final_gat(attention_output, edge_index, edge_weight)
-        
         # 激活函数
         out = self.relu(out)
-        
         # 返回形状为 (batch_size, num_nodes) 的输出
         return out.squeeze(1)  
+
+class StockPredictionModel_Ablation(nn.Module):
+    def __init__(self, input_size, hidden_size, hidden_size_gat1, output_gat1, gat_in_channels, gat_out_channels, gat_heads):
+        super(StockPredictionModel_Ablation, self).__init__()
+        self.attention_gru = AttentionGRUCell(input_size, hidden_size)
+        self.gat_layer = GATLayer(hidden_size_gat1, output_gat1,  gat_in_channels, gat_out_channels, gat_heads)
+        self.final_layer = nn.Linear(hidden_size + output_gat1, 1)  # 简化的输出层，结合GRU和GAT的输出
+
+    def forward(self, x_time_series, x_graph, edge_index, edge_weight):
+        # 处理时间序列数据
+        batch_size, num_samples, num_time_steps, num_features = x_time_series.size()
+        h_gru = torch.zeros(batch_size, num_samples, self.attention_gru.hidden_size).to(x_time_series.device)
+        for t in range(num_time_steps):
+            h_gru = self.attention_gru(x_time_series[:, :, t, :], h_gru)
+        h_gru_1 = h_gru[-1,:,:]
+        # 处理图数据
+        x_gat = self.gat_layer(x_graph, edge_index, edge_weight)
+        # 拼接GRU和GAT的输出
+        concatenated_output = torch.cat([h_gru_1, x_gat], dim=1)
+        # 经过一个线性层得到最终的输出
+        out = self.final_layer(concatenated_output)
+
+        return out.squeeze(1)
 
 
 def model_data(stock_features_train, x_graph_train, true_returns, stock_features_test, x_graph_test):
@@ -508,23 +517,98 @@ def model_data(stock_features_train, x_graph_train, true_returns, stock_features
 
 
 # 模型实例化和训练
+# def model_train_predict(num_models, num_epochs, save_path, model_dt, kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader):
+#     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+#     for num in range(num_models):
+#         # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+#         model = StockPredictionModel(
+#             input_size=num_features,
+#             hidden_size=32,
+#             hidden_size_gat1=5,
+#             output_gat1=32,
+#             gat_in_channels=num_features,
+#             gat_out_channels=4,
+#             gat_heads=4,
+#             hidden_size_gat2=5,
+#             embed_dim=32,
+#             num_hidden_states=16
+#         ).to(device)
+#         # print(model)
+#         criterion = nn.MSELoss()
+#         optimizer = optim.Adam(model.parameters(), lr=0.001)
+
+#         for epoch in range(num_epochs):
+#             model.train()
+#             running_loss = 0.0
+#             for (X_time_series_batch, y_batch), graph_batch in zip(train_time_series_loader, train_graph_loader):
+#                 X_time_series_batch, y_batch = X_time_series_batch.to(device), y_batch.to(device)
+#                 graph_batch = graph_batch.to(device)
+
+#                 optimizer.zero_grad()
+#                 outputs = model(X_time_series_batch, graph_batch.x, graph_batch.edge_index, graph_batch.edge_weight)
+#                 loss = criterion(outputs, y_batch.view(-1))
+#                 loss.backward()
+#                 optimizer.step()
+#                 running_loss += loss.item() * X_time_series_batch.size(0)
+
+#             epoch_loss = running_loss / len(train_time_series_loader.dataset)
+#             print(f"Epoch [{epoch+1}/{num_epochs}], Loss: {epoch_loss:.4f}")
+#             save_path_1 = save_path +  'model_'+str(num) + '/' + model_dt + '_' + str(epoch) + '.pth'
+#             torch.save(model.state_dict(), save_path_1)
+#             print(f"Model saved to {save_path_1}")
+#         print('Finished Training With Number ' + str(num))
+    
+#     for num in tqdm(range(num_models)):
+#         for epoch in range(num_epochs):
+#             # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
+#             model = StockPredictionModel(
+#                 input_size=num_features,
+#                 hidden_size=32,
+#                 hidden_size_gat1=5,
+#                 output_gat1=32,
+#                 gat_in_channels=num_features,
+#                 gat_out_channels=4,
+#                 gat_heads=4,
+#                 hidden_size_gat2=5,
+#                 embed_dim=32,
+#                 num_hidden_states=16
+#             ).to(device)
+#             model.load_state_dict(torch.load(save_path +  'model_'+str(num) + '/' + model_dt + '_' + str(epoch) + '.pth'))
+#             model.eval()
+#             with torch.no_grad():
+#                 index=0
+#                 for X_test_time_series_batch, graph_batch in zip(X_test_time_series, test_graph_loader):
+#                     X_test_time_series_batch = X_test_time_series_batch.unsqueeze(0).to(device)
+#                     graph_batch = graph_batch.to(device)
+
+#                     outputs = model(X_test_time_series_batch, graph_batch.x, graph_batch.edge_index, graph_batch.edge_weight)
+#                     prediction = outputs.cpu().numpy().tolist()
+#                     data_all = []
+#                     for i in range(len(prediction)):
+#                         one = []
+#                         one.append(kdcode_last[i])
+#                         one.append(df3_2_dt[index])
+#                         one.append(round(prediction[i],5))
+#                         data_all.append(one)
+#                     df = pd.DataFrame()
+#                     df = pd.DataFrame(columns=['kdcode', 'dt', 'score'], data=data_all)
+#                     df.to_csv(save_path+'prediction_'+str(num)+'/'+str(epoch)+'/'+df3_2_dt[index]+'.csv', header=True, index=False, encoding='utf_8_sig')
+#                     index+=1
+
 def model_train_predict(num_models, num_epochs, save_path, model_dt, kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader):
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     for num in range(num_models):
-        # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-        model = StockPredictionModel(
+        # 实例化简化模型
+        model = StockPredictionModel_Ablation(
             input_size=num_features,
             hidden_size=32,
             hidden_size_gat1=5,
             output_gat1=32,
             gat_in_channels=num_features,
             gat_out_channels=4,
-            gat_heads=4,
-            hidden_size_gat2=5,
-            embed_dim=32,
-            num_hidden_states=16
+            gat_heads=4
         ).to(device)
-        # print(model)
+
         criterion = nn.MSELoss()
         optimizer = optim.Adam(model.parameters(), lr=0.001)
 
@@ -549,25 +633,22 @@ def model_train_predict(num_models, num_epochs, save_path, model_dt, kdcode_last
             print(f"Model saved to {save_path_1}")
         print('Finished Training With Number ' + str(num))
     
-    for num in tqdm(range(num_models)):
+    # 评估模型
+    for num in range(num_models):
         for epoch in range(num_epochs):
-            # device = torch.device('cuda:0' if torch.cuda.is_available() else 'cpu')
-            model = StockPredictionModel(
+            model = StockPredictionModel_Ablation(
                 input_size=num_features,
                 hidden_size=32,
                 hidden_size_gat1=5,
                 output_gat1=32,
                 gat_in_channels=num_features,
                 gat_out_channels=4,
-                gat_heads=4,
-                hidden_size_gat2=5,
-                embed_dim=32,
-                num_hidden_states=16
+                gat_heads=4
             ).to(device)
             model.load_state_dict(torch.load(save_path +  'model_'+str(num) + '/' + model_dt + '_' + str(epoch) + '.pth'))
             model.eval()
             with torch.no_grad():
-                index=0
+                index = 0
                 for X_test_time_series_batch, graph_batch in zip(X_test_time_series, test_graph_loader):
                     X_test_time_series_batch = X_test_time_series_batch.unsqueeze(0).to(device)
                     graph_batch = graph_batch.to(device)
@@ -579,12 +660,12 @@ def model_train_predict(num_models, num_epochs, save_path, model_dt, kdcode_last
                         one = []
                         one.append(kdcode_last[i])
                         one.append(df3_2_dt[index])
-                        one.append(round(prediction[i],5))
+                        one.append(round(prediction[i], 5))
                         data_all.append(one)
                     df = pd.DataFrame()
                     df = pd.DataFrame(columns=['kdcode', 'dt', 'score'], data=data_all)
                     df.to_csv(save_path+'prediction_'+str(num)+'/'+str(epoch)+'/'+df3_2_dt[index]+'.csv', header=True, index=False, encoding='utf_8_sig')
-                    index+=1
+                    index += 1
                     
 
 dts_all =[
@@ -607,8 +688,8 @@ judge_value = 0.8
 label_t = 5
 his_t = 10
 num_models = 20
-num_epochs = 20
-save_path = '20240707_csi300_' + str(judge_value) + '_' + str(label_t) + '_' + str(his_t) + '_ns16' + '/'
+num_epochs = 5
+save_path = '2024070713_csi300_12' + '/'
 
 if not os.path.exists(save_path):
     os.makedirs(save_path)
@@ -640,4 +721,4 @@ for dts_one in tqdm(dts_all):
     
     model_train_predict(num_models, num_epochs, save_path, dts_one[3], kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader)
 
-# nohup /home/liyuante/miniconda3/envs/py38/bin/python /home/liyuante/neruocomputing/csi300.py >> /home/liyuante/neruocomputing/log_for_all/nhs2.txt 2>&1 &
+# nohup /home/liyuante/miniconda3/envs/py38/bin/python /home/liyuante/nerocomputing24/ablation_experiment/csi300/1and2.py >> /home/liyuante/neruocomputing/log_for_all/csi3001and2.txt 2>&1 &
