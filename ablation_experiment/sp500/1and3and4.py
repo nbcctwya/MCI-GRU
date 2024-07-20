@@ -743,7 +743,7 @@ def model_train_predict_1_3(num_models, num_epochs, save_path, model_dt, kdcode_
                     
                     
 def model_train_predict_1_3_4(num_models, num_epochs, save_path, model_dt, kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader):
-    device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
+    device = torch.device('cuda:3' if torch.cuda.is_available() else 'cpu')
     for num in range(num_models):
         model = StockPredictionModel_Ablation_1_3_4(
             input_size=num_features,
@@ -1056,15 +1056,15 @@ dts_all =[
 ['2023-08-31', '2023-08-01', '2023-09-01', '2023-09-30', '2023-10-01', '2023-10-31'],
 ['2023-09-30', '2023-09-01', '2023-10-01', '2023-10-31', '2023-11-01', '2023-11-30'], 
 ['2023-10-31', '2023-10-01', '2023-11-01', '2023-11-30', '2023-12-01', '2023-12-31']]
-filename = '/home/liyuante/nerocomputing24/dataset/hs300_2018_2023_new_1.csv'
-feature_cols = ['close','open','high','low','turnover','volume']
+filename = '/home/liyuante/nerocomputing24/dataset/sp500_2018_2023_new_1.csv'
+feature_cols = ['close','open','high','low','volume']
 num_features = len(feature_cols)
 judge_value = 0.8
 label_t = 5
 his_t = 10
 num_models = 20
 num_epochs = 5
-save_path = '20240713_csi300_23' + '/'
+save_path = '20240713_sp500_134' + '/'
 
 if not os.path.exists(save_path):
     os.makedirs(save_path)
@@ -1092,4 +1092,7 @@ for dts_one in tqdm(dts_all):
     print(dts_one)
     kdcode_last, df3_1_dt, df3_2_dt, stock_features_train, stock_features_test, x_graph_train, x_graph_test, edge_index, edge_weight, true_returns = fun_process_data_all(dts_one, filename, feature_cols, judge_value, label_t, his_t)
     train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader = model_data(stock_features_train, x_graph_train, true_returns, stock_features_test, x_graph_test)
-    model_train_predict_2_3(num_models, num_epochs, save_path, dts_one[3], kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader)
+    model_train_predict_1_3_4(num_models, num_epochs, save_path, dts_one[3], kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader)
+
+
+# nohup /home/liyuante/miniconda3/envs/py38/bin/python /home/liyuante/nerocomputing24/ablation_experiment/sp500/1and3and4.py >> /home/liyuante/neruocomputing/log_for_all/sp5001and3and4.txt 2>&1 &

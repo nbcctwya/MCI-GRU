@@ -577,6 +577,7 @@ class StockPredictionModel_Ablation_1_3(nn.Module):
 
         # Final prediction
         out = self.final_layer(concatenated_output)
+        out = out.relu()
         return out.squeeze(1)
 
 def model_data(stock_features_train, x_graph_train, true_returns, stock_features_test, x_graph_test):

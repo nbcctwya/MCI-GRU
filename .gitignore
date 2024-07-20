@@ -5,3 +5,6 @@ NASDAQ100_res/
 CSI300_res/
 SP500_res/
 ablation_experiment/csi300/res/
+ablation_experiment/csi500/res/
+ablation_experiment/nasdaq100/res/
+ablation_experiment/sp500/res/
