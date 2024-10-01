@@ -25,7 +25,7 @@ from torch_geometric.nn import GATConv
 from torch_geometric.data import Data, Batch, DataLoader
 
 
-# 计数列表中每个元素的出现次数
+# Count the occurrences of each element in a list
 def count_elements(lst):
     element_count = {}
     for element in lst:
@@ -35,12 +35,12 @@ def count_elements(lst):
             element_count[element] = 1
     return element_count
 
-# 对DataFrame的指定列进行排名打分
+# Rank and score a specified column in the DataFrame
 def rank_labeling(df, col_label='label', col_return='t2_am-15m_return_rate'):
     df[col_label] = df[col_return].rank(ascending=True, pct=True)
     return df
 
-# 数据处理（去极值+标准化）
+# Data processing (outlier removal + standardization)
 def process_daily_df_std(df, feature_cols):
     df = df.copy()
     for c in feature_cols:
@@ -48,7 +48,7 @@ def process_daily_df_std(df, feature_cols):
         df[c] = standardize_zscore(df[c])
     return df
 
-# 3 sigma去极值
+# Remove outliers using the 3-sigma rule
 def filter_extreme_3sigma(series, n=3):  # 3 sigma
     mean = series.mean()
     std = series.std()
@@ -56,105 +56,73 @@ def filter_extreme_3sigma(series, n=3):  # 3 sigma
     min_range = mean - n * std
     return np.clip(series, min_range, max_range)
 
-# Z-score标准化
+# Z-score standardization
 def standardize_zscore(series):
     std = series.std()
     mean = series.mean()
-    return (series - mean) / std  
+    return (series - mean) / std
 
 def generate_dataset(df_comp, feature_cols, hist_len, date_range):
-    """
-    生成时间序列数据集
-
-    参数：
-    df_comp: DataFrame，包含股票数据的DataFrame
-    feature_cols: list，包含要使用的特征列名的列表
-    hist_len: int，历史数据的长度，即时间序列的长度
-    date_range: tuple，包含起始日期和结束日期的元组，用于过滤数据
-
-    返回：
-    ds: list，包含生成的时间序列数据集，每个元素是一个元组，包含索引值和时间序列特征
-    """
-    ds = []  # 初始化空列表用于存储生成的数据集
-    id_vals = df_comp.index.values  # 获取DataFrame的索引值数组
-    df_comp = df_comp.reset_index(drop=True)  # 重置索引，丢弃原有索引
-    dt_vals = df_comp['dt'].values  # 获取日期列的值数组
-    feature_vals = df_comp[feature_cols].values  # 获取特征列的值数组
+    ds = []  # Initialize an empty list to store the generated dataset
+    id_vals = df_comp.index.values  # Get the array of index values from the DataFrame
+    df_comp = df_comp.reset_index(drop=True)  # Reset the index and drop the original index
+    dt_vals = df_comp['dt'].values  # Get the array of date values
+    feature_vals = df_comp[feature_cols].values  # Get the array of feature column values
 
     for idx, row in df_comp.iterrows():
-        dt = dt_vals[idx]  # 获取当前行的日期值
-        # 检查当前行的索引是否满足条件：需要至少有hist_len个历史数据，并且日期在指定范围内
+        dt = dt_vals[idx]  # Get the date value for the current row
+        # Check if the current row meets the condition: at least hist_len historical data, and the date is within the specified range
         if idx < hist_len or dt < date_range[0] or dt > date_range[1]:
-            continue  # 如果条件不满足，跳过当前行
+            continue  # Skip the current row if the condition is not met
         else:
-            # 获取从当前行往前推hist_len长度的时间序列特征
+            # Get the time series features from the current row back hist_len length
             seq_features = feature_vals[idx + 1 - hist_len: idx + 1]
-            # 将索引值和时间序列特征作为元组添加到数据集中
+            # Add the index value and time series features as a tuple to the dataset
             ds.append((id_vals[idx], seq_features))
-    return ds  # 返回生成的数据集
+    return ds  # Return the generated dataset
 
+# Retrieve training and testing datasets
 def fun_train_test_data(dts_one, df, his_t):
-    """
-    获取训练和测试数据集
-
-    参数：
-    dts_one: list，包含日期范围的列表，分别为：总日期范围的开始和结束，训练集开始和结束，测试集开始和结束
-    df: DataFrame，包含股票数据的DataFrame
-    his_t: int，历史数据的长度，即时间序列的长度
-
-    返回：
-    kdcode_last: list，包含满足条件的股票代码的列表
-    df3_1_dt: list，包含训练集日期的列表
-    df3_2_dt: list，包含测试集日期的列表
-    stock_features_train: list，包含训练集的特征数据
-    stock_features_test: list，包含测试集的特征数据
-    x_graph_train: list，包含训练集的图数据
-    x_graph_test: list，包含测试集的图数据
-    """
-    # 筛选日期范围内的数据
     df1 = df.loc[df['dt'] >= dts_one[1]]
-    df2 = df1.loc[df1['dt'] <= dts_one[5]]  # 训练+测试数据
-    df2_test = df2.loc[df2['dt'] >= dts_one[4]]  # 测试集
+    df2 = df1.loc[df1['dt'] <= dts_one[5]]  # Training + testing data
+    df2_test = df2.loc[df2['dt'] >= dts_one[4]]  # Testing set
     dts_test = sorted(list(set(df2_test['dt'].values.tolist())))
 
-    # 获取股票代码列表和日期列表
+    # Get the list of stock codes and dates
     kdcode_list = df2['kdcode'].values.tolist()
     dts = sorted(list(set(df2['dt'].values.tolist())))
 
-    # 统计每个股票代码出现的次数
+    # Count the occurrences of each stock code
     dict_list = count_elements(kdcode_list)
-    kdcode_last = []  # 每天都出现的股票
+    kdcode_last = []  # Stocks that appear every day
     for key in dict_list:
         if dict_list[key] == len(dts):
             kdcode_last.append(key)
 
-    # 筛选出满足条件的股票数据
-    df3 = df2[df2['kdcode'].isin(kdcode_last)]  # 训练+测试
+    # Filter stock data that meets the condition
+    df3 = df2[df2['kdcode'].isin(kdcode_last)]  # Training + testing
     len_test = len(dts_test)
     len_train = len(dts) - len(dts_test) - his_t
-    print('总天数:' + str(len(dts)))
-    print('股票数:' + str(len(kdcode_last)))
-    print('训练天数:' + str(len_train))
-    print('测试天数:' + str(len_test))
-    print('正确总条数:' + str(len(kdcode_last) * len(dts)))
-    print('实际总条数:' + str(len(df3)))
+    print('Total days: ' + str(len(dts)))
+    print('Number of stocks: ' + str(len(kdcode_last)))
+    print('Training days: ' + str(len_train))
+    print('Testing days: ' + str(len_test))
+    print('Expected total rows: ' + str(len(kdcode_last) * len(dts)))
+    print('Actual total rows: ' + str(len(df3)))
 
-    # 重置索引并获取日期范围
-    df3 = df3[['kdcode','dt'] + feature_cols]  # 训练+测试+特征
+    # Reset index and get date range
+    df3 = df3[['kdcode', 'dt'] + feature_cols]  # Training + testing + features
     df3 = df3.reset_index(drop=True)
-    date_range_list = sorted(list(set(df3['dt'].values.tolist())))  # 训练+测试的日期
+    date_range_list = sorted(list(set(df3['dt'].values.tolist())))  # Dates for training + testing
 
-    # 按股票代码分组
+    # Group by stock code
     df_group = df3.groupby('kdcode')
     param_list = []
     for kdcode in df_group.groups.keys():
         df_comp = df_group.get_group(kdcode)
-        """
-        []
-        """
         param_list.append((df_comp, feature_cols, his_t, (date_range_list[0], date_range_list[-1])))
     
-    # 多进程生成时间序列数据集
+    # Use multiprocessing to generate the time series dataset
     result = []
     pool = multiprocessing.Pool(10)
     result = pool.starmap(generate_dataset, param_list)
@@ -162,16 +130,16 @@ def fun_train_test_data(dts_one, df, his_t):
     pool.join()
     ds_data = np.concatenate([x for x in result if len(x) > 0])
     
-    # 获取训练数据索引和特征
+    # Get the training data indices and features
     idx_data = np.array([x[0] for x in ds_data])
     X_data = np.array([x[1] for x in ds_data])
     s_idx = pd.Series(index=idx_data, data=list(range(len(idx_data))))
     idx_train = s_idx[[i for i in df3.index if i in s_idx.index]].values
     X_train = X_data[idx_train]
     
-    # 获取训练集的图数据
-    df3_1 = df3.loc[df3['dt']>=dts_one[2]]
-    df3_1 = df3_1.loc[df3_1['dt']<=dts_one[3]]
+    # Get the graph data for the training set
+    df3_1 = df3.loc[df3['dt'] >= dts_one[2]]
+    df3_1 = df3_1.loc[df3_1['dt'] <= dts_one[3]]
     df3_1 = df3_1.reset_index(drop=True)
     df3_1_dt = sorted(list(set(df3_1['dt'].values.tolist())))
     df4_1 = df3_1.reset_index().sort_values(['dt', 'kdcode'])
@@ -179,11 +147,11 @@ def fun_train_test_data(dts_one, df, his_t):
     df4_1_list = df4_1.values.tolist()
     x_graph_train = []
     for i in range(len(df3_1_dt)):
-        x_graph_train.append(df4_1_list[i*len(kdcode_last):(i+1)*len(kdcode_last)])
+        x_graph_train.append(df4_1_list[i * len(kdcode_last):(i + 1) * len(kdcode_last)])
 
-    # 获取测试集的图数据
-    df3_2 = df3.loc[df3['dt']>=dts_one[4]]
-    df3_2 = df3_2.loc[df3_2['dt']<=dts_one[5]]
+    # Get the graph data for the testing set
+    df3_2 = df3.loc[df3['dt'] >= dts_one[4]]
+    df3_2 = df3_2.loc[df3_2['dt'] <= dts_one[5]]
     df3_2 = df3_2.reset_index(drop=True)
     df3_2_dt = sorted(list(set(df3_2['dt'].values.tolist())))
     df4_2 = df3_2.reset_index().sort_values(['dt', 'kdcode'])
@@ -191,18 +159,18 @@ def fun_train_test_data(dts_one, df, his_t):
     df4_2_list = df4_2.values.tolist()
     x_graph_test = []
     for i in range(len(df3_2_dt)):
-        x_graph_test.append(df4_2_list[i*len(kdcode_last):(i+1)*len(kdcode_last)])
+        x_graph_test.append(df4_2_list[i * len(kdcode_last):(i + 1) * len(kdcode_last)])
 
-    # 获取所有时间序列特征并划分训练和测试集
+    # Get all time series features and split them into training and testing sets
     stock_features_all = []
-    for i in range(len(dts)-his_t):
-        stock_features_all.append(X_train[i*len(kdcode_last):(i+1)*len(kdcode_last)])
-    stock_features_all_1 = stock_features_all[len(stock_features_all)-len(df3_1_dt)-len(df3_2_dt):]
+    for i in range(len(dts) - his_t):
+        stock_features_all.append(X_train[i * len(kdcode_last):(i + 1) * len(kdcode_last)])
+    stock_features_all_1 = stock_features_all[len(stock_features_all) - len(df3_1_dt) - len(df3_2_dt):]
     stock_features_train = stock_features_all_1[0:len(df3_1_dt)]
     stock_features_test = stock_features_all_1[len(df3_1_dt):]
     return kdcode_last, df3_1_dt, df3_2_dt, stock_features_train, stock_features_test, x_graph_train, x_graph_test
 
-# 获取股票之间的相关性矩阵
+# correlation matrix between stocks
 def fun_relation(kdcode_list, df):
     df5 = df.loc[df['dt']<=dts_one[0]]
     df5_dts = sorted(list(set(df5['dt'].values.tolist())))
@@ -284,13 +252,13 @@ def fun_label(df, kdcode_last, df3_1_dt, label_t, dts_one):
             true_returns.append(label_list[i*len(kdcode_last):(i+1)*len(kdcode_last)])
         true_returns = np.array(true_returns)
     else:
-        print('标签缺失，需要检查')
+        print("error")
     return true_returns
 
 def fun_process_data_all(dts_one, filename, feature_cols, judge_value, label_t, his_t):
     df_org = pd.read_csv(filename)
     
-    # 数据预处理
+    # Data preprocessing
     df_features_grouped = df_org.groupby('dt')
     res = []
     for dt in df_features_grouped.groups:
@@ -299,20 +267,20 @@ def fun_process_data_all(dts_one, filename, feature_cols, judge_value, label_t, 
             mean_val = df[column].mean()
             df[column].fillna(mean_val, inplace=True)
         df = df.fillna(0.0)
-        processed_df = process_daily_df_std(df, feature_cols)  
+        processed_df = process_daily_df_std(df, feature_cols)  # Standardize daily data
         res.append(processed_df)
     df = pd.concat(res)
-    
-    # 获取训练和测试的数据集
+        
+    # Get training and testing datasets
     kdcode_last, df3_1_dt, df3_2_dt, stock_features_train, stock_features_test, x_graph_train, x_graph_test = fun_train_test_data(dts_one, df, his_t)
     
-    # 获取关系矩阵
+    # Get the relationship matrix
     matrx = fun_relation(kdcode_last, df)
     
-    # 构建训练和测试的关系图
+    # Build training and testing relationship graphs
     edge_index, edge_weight = fun_graph(matrx, kdcode_last, judge_value)
     
-    # 获取训练集的标签
+    # Get the labels for the training dataset
     true_returns = fun_label(df_org, kdcode_last, df3_1_dt, label_t, dts_one)
     
     return kdcode_last, df3_1_dt, df3_2_dt, stock_features_train, stock_features_test, x_graph_train, x_graph_test, edge_index, edge_weight, true_returns
@@ -440,11 +408,11 @@ class StockPredictionModel(nn.Module):
         self.gat_layer = GATLayer(hidden_size_gat1, output_gat1,  gat_in_channels, gat_out_channels, gat_heads)
         self.cross_attention = CrossAttention(hidden_size)
         self.num_hidden_states = num_hidden_states
-        self.market_hidden_states_1 = nn.Parameter(torch.randn(num_hidden_states, hidden_size))  # 市场隐状态，二维向量
-        self.market_hidden_states_2 = nn.Parameter(torch.randn(num_hidden_states, hidden_size))  # 市场隐状态，二维向量
-        self.self_attention = SelfAttention(hidden_size * 4)  # 拼接后的维度是4倍的 hidden_size
-        self.final_gat = GATLayer_1(hidden_size_gat2, hidden_size * 4, 1, 1)  # 最终 GAT 层用于输出预测值
-        self.relu = nn.ReLU()  
+        self.market_hidden_states_1 = nn.Parameter(torch.randn(num_hidden_states, hidden_size))  # Market hidden states, 2D vector
+        self.market_hidden_states_2 = nn.Parameter(torch.randn(num_hidden_states, hidden_size))  # Market hidden states, 2D vector
+        self.self_attention = SelfAttention(hidden_size * 4)  # Self-attention mechanism, concatenated dimension is 4 times hidden_size
+        self.final_gat = GATLayer_1(hidden_size_gat2, hidden_size * 4, 1, 1)  # Final GAT layer for output prediction
+        self.relu = nn.ReLU()  # Activation function
         # self.dim_reduction = nn.Linear(32, 16)
         
     def forward(self, x_time_series, x_graph, edge_index, edge_weight):
@@ -453,39 +421,19 @@ class StockPredictionModel(nn.Module):
         for t in range(num_time_steps):
             h_gru = self.attention_gru(x_time_series[:, :, t, :], h_gru)
         h_gru_1 = h_gru[-1,:,:]
-        # print(h_gru_1.shape)
 
-        # 处理图数据
         x_gat = self.gat_layer(x_graph, edge_index, edge_weight)
-        # print(x_gat.shape)
 
-        # 用市场隐状态 R 的表征去访问股票表征 S
-        # torch.Size([285, 32])
         stock_rep_1 = self.cross_attention(h_gru_1.unsqueeze(1), self.market_hidden_states_1, self.market_hidden_states_1).squeeze(1)
-        # print(stock_rep_1.shape)
-        # torch.Size([285, 16])
-        # # self.dim_reduction = nn.Linear(32, 16)
-        # # x_gat_reduced = self.dim_reduction(x_gat)  # Reducing dimension from 32 to 16
-        # x_gat_reduced = self.dim_reduction(x_gat)
         stock_rep_2 = self.cross_attention(x_gat.unsqueeze(1), self.market_hidden_states_2, self.market_hidden_states_2).squeeze(1)
-        # print(stock_rep_2.shape)
-        # 报错
     
-        # 拼接四个部分的输出
         concatenated_output = torch.cat([h_gru_1, x_gat, stock_rep_1, stock_rep_2], dim=1)
-        # print(concatenated_output.shape)
-        
-        # 添加自注意力机制
+
         attention_output = self.self_attention(concatenated_output.unsqueeze(1)).squeeze(1)
-        # print(attention_output.shape)
-        
-        # 通过最终 GAT 层进行预测
+
         out = self.final_gat(attention_output, edge_index, edge_weight)
-        
-        # 激活函数
         out = self.relu(out)
         
-        # 返回形状为 (batch_size, num_nodes) 的输出
         return out.squeeze(1)  
 
 
@@ -511,7 +459,6 @@ def model_data(stock_features_train, x_graph_train, true_returns, stock_features
     return train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader
 
 
-# 模型实例化和训练
 def model_train_predict(num_models, num_epochs, save_path, model_dt, kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader):
     device = torch.device('cuda:1' if torch.cuda.is_available() else 'cpu')
     for num in range(num_models):
@@ -604,7 +551,7 @@ dts_all =[
 ['2023-08-31', '2023-08-01', '2023-09-01', '2023-09-30', '2023-10-01', '2023-10-31'],
 ['2023-09-30', '2023-09-01', '2023-10-01', '2023-10-31', '2023-11-01', '2023-11-30'], 
 ['2023-10-31', '2023-10-01', '2023-11-01', '2023-11-30', '2023-12-01', '2023-12-31']]
-filename = '/home/liyuante/neruocomputing/dataset/hs300_2018_2023_new_1.csv'
+filename = '/home/liyuante/dataset/hs300_2018_2023_new_1.csv'
 feature_cols = ['close','open','high','low','turnover','volume']
 num_features = len(feature_cols)
 judge_value = 0.8
@@ -633,7 +580,6 @@ for i in range(num_models):
         if not os.path.exists(save_path_2):
             os.makedirs(save_path_2)
         
-#测试代码是否跑通，只用一个月数据
 dts_all = dts_all[0:12]
 
 for dts_one in tqdm(dts_all):
@@ -644,4 +590,4 @@ for dts_one in tqdm(dts_all):
     
     model_train_predict(num_models, num_epochs, save_path, dts_one[3], kdcode_last, df3_2_dt, train_time_series_loader, train_graph_loader, X_test_time_series, test_graph_loader)
 
-# nohup /home/liyuante/miniconda3/envs/py38/bin/python /home/liyuante/neruocomputing/csi300.py >> /home/liyuante/neruocomputing/log_for_all/nhs2.txt 2>&1 &
+# nohup /home/liyuante/miniconda3/envs/py38/bin/python /home/liyuante/csi300.py >> /home/liyuante/log_for_all/nhs2.txt 2>&1 &
