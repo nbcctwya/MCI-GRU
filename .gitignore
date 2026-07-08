@@ -1,5 +1,12 @@
 log_for_all/
 dataset/
+
+# qlib baseline outputs (checkpoints, predictions, reports)
+outputs/
+
+# python
+__pycache__/
+*.pyc
 CSI500_res/
 NASDAQ100_res/
 CSI300_res/

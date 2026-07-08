@@ -1,0 +1,59 @@
+# MCI-GRU baseline config — CSI 300 (A-shares, qlib CN data).
+# Hyperparameters mirror the original code/csi300.py defaults.
+market: csi300
+region: cn
+provider_uri: "~/.qlib/qlib_data/cn_data"
+benchmark: SH000300
+
+universe:
+  start: "2009-01-01"
+  end: "2025-12-31"
+  presence_threshold: 0.95   # keep stocks present on >=95% of trading days
+  max_instruments: null      # null = no cap; smoke sets this to 20
+
+splits:
+  train: {start: "2009-01-01", end: "2020-12-31"}
+  valid: {start: "2021-01-01", end: "2022-12-31"}
+  test:  {start: "2023-01-01", end: "2025-12-31"}
+
+# 6 features incl. turnover. qlib $turnover is 100% NaN, so turnover is proxied
+# as volume*close (see turnover_mode).
+features: [close, open, high, low, turnover, volume]
+turnover_mode: proxy          # proxy = volume*close ; none = drop turnover
+
+graph:
+  judge_value: 0.8            # correlation threshold for graph edges
+  corr_window_days: 250       # last N train days used for the correlation matrix
+
+model:
+  hidden: 32
+  hidden_size_gat1: 5
+  output_gat1: 32
+  gat_out_channels: 4
+  gat_heads: 4
+  hidden_size_gat2: 5
+  embed_dim: 32
+  num_hidden_states: 16
+  his_t: 10                   # time-series history window
+  label_t: 5                  # forward-return horizon
+  lr: 0.001
+  loss: mse
+
+train:
+  num_seeds: 5
+  seeds: [0, 1, 2, 3, 4]
+  num_epochs: 20
+  select_metric: valid_rankic # checkpoint selection metric
+  device: auto                 # auto = cuda:0 if available else cpu
+
+backtest:
+  account: 1.0e+8
+  topk: 30
+  n_drop: 5
+  open_cost: 0.0005           # buy cost (fraction)
+  close_cost: 0.0015          # sell cost (fraction)
+  min_cost: 5
+  deal_price: close
+  limit_threshold: 0.095      # A-share daily price limit
+
+output_dir: csi300
